@@ -126,7 +126,7 @@ def background(config: dict, theme_key: str, post_date: date, used: set[str]) ->
 
     img, meta = photo
     img = ImageOps.fit(ImageOps.exif_transpose(img).convert("RGB"), (w, h), method=Image.LANCZOS)
-    img = img.filter(ImageFilter.GaussianBlur(2))  # 文字を読みやすくするため少しぼかす
+    img = img.filter(ImageFilter.GaussianBlur(6))  # 文字を読みやすくし、看板などの文字が読めないようにぼかす
     # 暗い幕（中央ほど濃く）
     alpha = int(255 * cfg.get("overlay_opacity", 0.55))
     shade = Image.new("L", (w, h), 0)

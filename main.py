@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shutil
 import sys
 from datetime import date, datetime, timedelta, timezone
 
@@ -53,33 +54,42 @@ def post_dir(d: date, lang: str) -> str:
     return os.path.join(ROOT, "posts", f"{d.isoformat()}-{lang}")
 
 
-def find_slot(config: dict, post_date: date, lang: str) -> dict | None:
+def find_slot(config: dict, post_date: date, lang: str) -> dict:
     wd = WEEKDAYS[post_date.weekday()]
     for s in config.get("schedule", []):
         if s["weekday"] == wd and s["lang"] == lang:
             return s
-    return None
+    # 予定外の曜日に手動で実行したときは「今週のみことば」として作る
+    print(f"{post_date} ({wd}) の {lang} 投稿は予定外のため、臨時投稿（今週のみことば）として作成します。")
+    return {"weekday": wd, "time": "臨時", "lang": lang, "theme": "midweek"}
 
 
-def cmd_prepare(post_date: date, lang: str, skip_ai: bool) -> None:
+def cmd_prepare(post_date: date, lang: str, skip_ai: bool, remake: bool = False) -> None:
     from autopost import caption as cap
     from autopost import image
 
     config = load_yaml("config.yaml")
     slot = find_slot(config, post_date, lang)
-    if slot is None:
-        print(f"{post_date} ({WEEKDAYS[post_date.weekday()]}) の {lang} 投稿は予定されていません。スキップします。")
-        return
     lc = config["languages"][lang]
     theme_key = slot["theme"]
     theme = lc["themes"][theme_key]
 
     out = post_dir(post_date, lang)
-    if os.path.exists(os.path.join(out, "meta.json")):
-        print(f"{out} は作成済みです。スキップします。")
-        return
-
     history = load_history()
+    meta_path = os.path.join(out, "meta.json")
+    if os.path.exists(meta_path):
+        with open(meta_path, encoding="utf-8") as f:
+            published = json.load(f).get("published_media_id")
+        if not remake:
+            print(f"{out} は作成済みです。スキップします。")
+            return
+        if published:
+            print(f"{out} はすでにInstagramに投稿済みのため、作り直しません。")
+            return
+        print(f"{out} を作り直します。")
+        shutil.rmtree(out)
+        history = [h for h in history if not (h["date"] == post_date.isoformat() and h.get("lang", "ja") == lang)]
+
     verse = pick_verse(load_yaml("verses.yaml"), history, lang)
     events = upcoming_events(load_yaml("events.yaml"), post_date)
 
@@ -147,10 +157,11 @@ def main() -> None:
     p.add_argument("--lang", choices=["ja", "en"], required=True)
     p.add_argument("--date", help="YYYY-MM-DD（省略時は日本時間の今日）")
     p.add_argument("--skip-ai", action="store_true")
+    p.add_argument("--remake", action="store_true", help="未投稿の内容を作り直す")
     a = p.parse_args()
     d = date.fromisoformat(a.date) if a.date else datetime.now(JST).date()
     if a.command == "prepare":
-        cmd_prepare(d, a.lang, a.skip_ai)
+        cmd_prepare(d, a.lang, a.skip_ai, a.remake)
     else:
         cmd_publish(d, a.lang)
 
