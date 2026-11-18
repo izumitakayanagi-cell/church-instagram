@@ -1,11 +1,5 @@
 [
   {
-    "date": "2026-11-21",
-    "lang": "en",
-    "verse_ref": "ヨハネによる福音書 3章16節",
-    "background": "pixabay:4617905"
-  },
-  {
     "date": "2026-11-19",
     "lang": "ja",
     "verse_ref": "マタイによる福音書 11章28節",
@@ -22,5 +16,11 @@
     "lang": "ja",
     "verse_ref": "ヨハネによる福音書 3章16節",
     "background": "pixabay:8055647"
+  },
+  {
+    "date": "2026-11-21",
+    "lang": "en",
+    "verse_ref": "ヨハネによる福音書 3章16節",
+    "background": "pixabay:1040664"
   }
 ]
