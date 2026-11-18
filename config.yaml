@@ -1,0 +1,97 @@
+# ===== 東京ソフィア長老教会 Instagram 自動投稿 設定ファイル =====
+# 「（要記入）」の箇所を実際の情報に書き換えてください。
+# ここに書いた情報だけが投稿に使われます（AIが事実を作り出さないようにするため）。
+
+church:
+  name: 東京ソフィア長老教会
+  denomination: 日本オリベットアッセンブリー
+  address: 東京都新宿区高田馬場1-33-15 TFT高田馬場駅前ビル301
+  access: JR高田馬場駅 戸山口から徒歩3分
+  website: https://tokyosophia.org
+  services:
+    - name: 日本語礼拝
+      time: 毎週日曜 11:00〜12:00（開場 10:30）
+    - name: 英語礼拝 (English Service)
+      time: 毎週日曜 14:00〜15:00（開場 13:30）
+  welcome_message: どなたでもお気軽にお越しください。初めての方も歓迎いたします。
+
+instagram:
+  username: tokyosophia
+  user_id: "17841445487867831"   # Metaの「API setup with Unified login」画面に表示されるID
+
+# 曜日ごとの投稿テーマ（キーは英語の曜日名: monday〜sunday）
+# GitHub Actions は水曜・土曜 18:00 (日本時間) に実行されます
+themes:
+  wednesday:
+    headline: 今週のみことば
+    instruction: >-
+      週の半ばに読む人を励ます短い黙想文を書いてください。
+      みことばから一つの気づきを、日常に結びつけて優しく語ってください。
+      最後に今週の日曜礼拝（日本語・英語）への招きを一文添えてください。
+    colors: ["#1f3b4d", "#3d6e7a"]   # 背景グラデーション（上→下）
+  saturday:
+    headline: 主日礼拝のご案内
+    instruction: >-
+      明日の日曜礼拝へのお誘いの投稿を書いてください。
+      みことばに軽く触れつつ、初めての人も安心して来られるよう温かく招いてください。
+    colors: ["#5a3e2b", "#a7774f"]
+
+caption:
+  max_chars: 400          # 本文（AI生成部分）の目安文字数
+  # Instagramは1投稿あたりのハッシュタグを5個までに制限している（2025年12月〜）ため、合計5個にする
+  max_hashtags: 5
+  # 毎回必ず付けるハッシュタグ
+  fixed_hashtags:
+    - "#東京ソフィア長老教会"
+    - "#TokyoSophiaPresbyterianChurch"
+  # 候補：AIが投稿内容に合うものを毎回選ぶ（残りの枠＝3個）
+  # 教会Webサイト（tokyosophia.org）の内容から作成。自由に追加・削除してください
+  hashtag_pool:
+    # 場所
+    - "#高田馬場"
+    - "#高田馬場教会"
+    - "#新宿"
+    - "#新宿教会"
+    - "#東京の教会"
+    - "#TokyoChurch"
+    - "#TakadanobabaChurch"
+    # 教会・礼拝
+    - "#教会"
+    - "#キリスト教会"
+    - "#プロテスタント"
+    - "#長老教会"
+    - "#Presbyterian"
+    - "#礼拝"
+    - "#日曜礼拝"
+    - "#英語礼拝"
+    - "#EnglishService"
+    - "#EnglishChurchTokyo"
+    - "#InternationalChurch"
+    # 聖書・信仰
+    - "#聖書"
+    - "#みことば"
+    - "#聖書の言葉"
+    - "#聖書を読む"
+    - "#キリスト教"
+    - "#クリスチャン"
+    - "#祈り"
+    - "#BibleVerse"
+    # 人生の問い（Webサイトのテーマ）
+    - "#生きる意味"
+    - "#人生の意味"
+    - "#孤独"
+    - "#心の支え"
+    - "#初めての教会"
+
+ai:
+  model: claude-opus-5-5
+  effort: medium
+
+image:
+  width: 1080
+  height: 1350             # 4:5 縦長（Instagram推奨）
+  # 上から順に存在するフォントを使います
+  fonts:
+    - /usr/share/fonts/opentype/noto/NotoSerifCJK-Bold.ttc      # GitHub Actions (Ubuntu)
+    - /System/Library/Fonts/ヒラギノ明朝 ProN.ttc                 # macOS
+    - /System/Library/Fonts/Hiragino Sans GB.ttc                # macOS 予備
