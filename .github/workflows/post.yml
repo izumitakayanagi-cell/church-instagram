@@ -1,13 +1,13 @@
 name: Instagram 自動投稿
+# 一覧に表示される名前（どの実行か見分けやすくする）
+run-name: ${{ github.event_name == 'schedule' && '定時チェック（予定があれば投稿）' || format('{0} {1} {2}{3}', inputs.date || '今日', inputs.lang == 'en' && '英語' || '日本語', inputs.dry_run && '試し作成' || '投稿', inputs.remake && '（作り直し）' || '') }}
 
 on:
   schedule:
-    # 時刻はUTC表記（日本時間 − 9時間）
-    # ※GitHub Actions の定時実行は数分〜数十分遅れることがあります
-    - cron: "0 9 * * 2"   # 火曜 18:00 日本語
-    - cron: "0 9 * * 3"   # 水曜 18:00 英語
-    - cron: "0 8 * * 6"   # 土曜 17:00 日本語
-    - cron: "0 9 * * 6"   # 土曜 18:00 英語
+    # 毎日 17:00 と 18:00（日本時間）に起動し、config.yaml の予定に合うものがあれば投稿する
+    # 時刻はUTC表記（日本時間 − 9時間）。GitHubの都合で数分〜数十分遅れることがあります
+    - cron: "0 8 * * *"   # 17:00 日本時間
+    - cron: "0 9 * * *"   # 18:00 日本時間
   workflow_dispatch:
     inputs:
       lang:
@@ -38,8 +38,8 @@ jobs:
   post:
     runs-on: ubuntu-latest
     env:
-      # 手動実行なら選んだ言語、定時実行ならcronの時刻から言語を決める
-      LANG_CODE: ${{ inputs.lang || ((github.event.schedule == '0 9 * * 2' || github.event.schedule == '0 8 * * 6') && 'ja' || 'en') }}
+      IS_SCHEDULE: ${{ github.event_name == 'schedule' }}
+      LANG_CODE: ${{ inputs.lang || 'ja' }}
       DATE_ARG: ${{ inputs.date && format('--date {0}', inputs.date) || '' }}
       REMAKE_ARG: ${{ inputs.remake && '--remake' || '' }}
     steps:
@@ -59,14 +59,19 @@ jobs:
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY }}
-        run: python main.py prepare --lang "$LANG_CODE" $DATE_ARG $REMAKE_ARG
+        run: |
+          if [ "$IS_SCHEDULE" = "true" ]; then
+            python main.py auto-prepare
+          else
+            python main.py prepare --lang "$LANG_CODE" $DATE_ARG $REMAKE_ARG
+          fi
 
       - name: 作成した画像と文章をリポジトリに保存
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A posts state
-          git diff --cached --quiet || git commit -m "投稿を作成: ${LANG_CODE} ${{ inputs.date || 'today' }}"
+          git diff --cached --quiet || git commit -m "投稿を作成"
           git pull --rebase && git push
 
       - name: Instagram に投稿
@@ -77,11 +82,15 @@ jobs:
         run: |
           # Instagram が画像を取得できるよう、公開リポジトリの固定URLを渡す
           export IMAGE_BASE_URL="https://raw.githubusercontent.com/${{ github.repository }}/$(git rev-parse HEAD)"
-          python main.py publish --lang "$LANG_CODE" $DATE_ARG
+          if [ "$IS_SCHEDULE" = "true" ]; then
+            python main.py auto-publish
+          else
+            python main.py publish --lang "$LANG_CODE" $DATE_ARG
+          fi
 
       - name: 投稿結果を保存
         if: ${{ !inputs.dry_run }}
         run: |
           git add posts
-          git diff --cached --quiet || git commit -m "投稿完了を記録: ${LANG_CODE}"
+          git diff --cached --quiet || git commit -m "投稿完了を記録"
           git pull --rebase && git push
