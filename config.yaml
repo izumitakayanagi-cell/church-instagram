@@ -44,6 +44,8 @@ languages:
       fixed_hashtags:
         - "#東京ソフィア長老教会"
         - "#TokyoSophiaPresbyterianChurch"
+        - "#キリスト教"
+        - "#聖書"
       hashtag_pool:        # AIが内容に合うものを毎回選ぶ（tokyosophia.org の内容から作成）
         - "#高田馬場"
         - "#高田馬場教会"
@@ -99,6 +101,8 @@ languages:
       fixed_hashtags:
         - "#TokyoSophiaPresbyterianChurch"
         - "#EnglishChurchTokyo"
+        - "#Christianity"
+        - "#Bible"
       hashtag_pool:
         - "#TokyoChurch"
         - "#ChurchInTokyo"
@@ -145,7 +149,8 @@ image:
 # 2) なければ Pixabay（商用無料・クレジット不要）から季節に合う写真を自動で選びます
 backgrounds:
   search_queries:
-    spring: ["tokyo cherry blossom", "sakura japan", "tokyo spring"]
-    summer: ["tokyo skyline", "tokyo summer", "japan garden green"]
-    autumn: ["tokyo autumn", "japan autumn leaves", "ginkgo autumn"]
-    winter: ["tokyo night", "tokyo illumination", "japan winter"]
+    # 看板や電話番号が写り込みにくい「自然・夜景・遠景」を中心にしています
+    spring: ["cherry blossom japan", "sakura tree", "tokyo skyline spring"]
+    summer: ["japanese garden green", "blue sky clouds", "tokyo skyline"]
+    autumn: ["japan autumn leaves", "ginkgo autumn", "maple leaves autumn"]
+    winter: ["tokyo night skyline", "tokyo tower night", "winter illumination"]
