@@ -54,14 +54,41 @@ def post_dir(d: date, lang: str) -> str:
     return os.path.join(ROOT, "posts", f"{d.isoformat()}-{lang}")
 
 
+def _matches(entry: dict, d: date) -> bool:
+    if entry.get("date"):
+        return str(entry["date"]) == d.isoformat()
+    return entry.get("weekday") == WEEKDAYS[d.weekday()]
+
+
 def find_slot(config: dict, post_date: date, lang: str) -> dict:
-    wd = WEEKDAYS[post_date.weekday()]
-    for s in config.get("schedule", []):
-        if s["weekday"] == wd and s["lang"] == lang:
+    entries = config.get("schedule", [])
+    # 日付指定（臨時・予約投稿）を曜日指定より優先する
+    for s in sorted(entries, key=lambda e: 0 if e.get("date") else 1):
+        if _matches(s, post_date) and s["lang"] == lang:
             return s
-    # 予定外の曜日に手動で実行したときは「今週のみことば」として作る
-    print(f"{post_date} ({wd}) の {lang} 投稿は予定外のため、臨時投稿（今週のみことば）として作成します。")
-    return {"weekday": wd, "time": "臨時", "lang": lang, "theme": "midweek"}
+    # 予定外の日に手動で実行したときは「今週のみことば」として作る
+    print(f"{post_date} の {lang} 投稿は予定外のため、臨時投稿（今週のみことば）として作成します。")
+    return {"time": "臨時", "lang": lang, "theme": "midweek"}
+
+
+def due_slots(config: dict, now: datetime) -> list[dict]:
+    """今の時刻に投稿すべき予定（予定時刻の5分前〜3時間後）を返す。"""
+    today = now.date()
+    out = []
+    for s in config.get("schedule", []):
+        if not _matches(s, today):
+            continue
+        hh, mm = map(int, str(s["time"]).split(":"))
+        slot_dt = datetime(today.year, today.month, today.day, hh, mm, tzinfo=JST)
+        if slot_dt - timedelta(minutes=5) <= now <= slot_dt + timedelta(hours=3):
+            out.append(s)
+    # 同じ日の日本語・英語が重なったら、時刻順→日本語→英語の順にする
+    seen, result = set(), []
+    for s in sorted(out, key=lambda e: (str(e["time"]), e["lang"] != "ja")):
+        if s["lang"] not in seen:
+            seen.add(s["lang"])
+            result.append(s)
+    return result
 
 
 def cmd_prepare(post_date: date, lang: str, skip_ai: bool, remake: bool = False) -> None:
@@ -151,14 +178,35 @@ def cmd_publish(post_date: date, lang: str) -> None:
     print(f"投稿しました: media_id={media_id}")
 
 
+def cmd_auto(stage: str) -> None:
+    """定時実行用：今の時刻に予定されている投稿を作成（prepare）または投稿（publish）する。"""
+    config = load_yaml("config.yaml")
+    now = datetime.now(JST)
+    slots = due_slots(config, now)
+    if not slots:
+        print(f"{now:%Y-%m-%d %H:%M} に予定されている投稿はありません。")
+        return
+    for s in slots:
+        print(f"予定: {now.date()} {s['time']} {s['lang']}")
+        if stage == "prepare":
+            cmd_prepare(now.date(), s["lang"], skip_ai=False)
+        else:
+            cmd_publish(now.date(), s["lang"])
+
+
 def main() -> None:
     p = argparse.ArgumentParser()
-    p.add_argument("command", choices=["prepare", "publish"])
-    p.add_argument("--lang", choices=["ja", "en"], required=True)
+    p.add_argument("command", choices=["prepare", "publish", "auto-prepare", "auto-publish"])
+    p.add_argument("--lang", choices=["ja", "en"])
     p.add_argument("--date", help="YYYY-MM-DD（省略時は日本時間の今日）")
     p.add_argument("--skip-ai", action="store_true")
     p.add_argument("--remake", action="store_true", help="未投稿の内容を作り直す")
     a = p.parse_args()
+    if a.command.startswith("auto-"):
+        cmd_auto(a.command.split("-", 1)[1])
+        return
+    if not a.lang:
+        p.error("--lang を指定してください")
     d = date.fromisoformat(a.date) if a.date else datetime.now(JST).date()
     if a.command == "prepare":
         cmd_prepare(d, a.lang, a.skip_ai, a.remake)
