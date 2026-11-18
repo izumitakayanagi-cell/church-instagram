@@ -1,19 +1,9 @@
 [
   {
     "date": "2026-11-21",
-    "verse_ref": "ヨハネによる福音書 3章16節"
-  },
-  {
-    "date": "2026-11-21",
     "lang": "en",
     "verse_ref": "ヨハネによる福音書 3章16節",
     "background": "pixabay:4617905"
-  },
-  {
-    "date": "2026-11-21",
-    "lang": "ja",
-    "verse_ref": "詩篇 23篇1節",
-    "background": "pixabay:5899099"
   },
   {
     "date": "2026-11-19",
@@ -26,5 +16,11 @@
     "lang": "en",
     "verse_ref": "詩篇 23篇1節",
     "background": "pixabay:9500830"
+  },
+  {
+    "date": "2026-11-21",
+    "lang": "ja",
+    "verse_ref": "ヨハネによる福音書 3章16節",
+    "background": "pixabay:8055647"
   }
 ]

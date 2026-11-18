@@ -3,13 +3,13 @@
   "lang": "ja",
   "time": "17:00",
   "theme": "sunday",
-  "verse_ref": "詩篇 23篇1節",
+  "verse_ref": "ヨハネによる福音書 3章16節",
   "background": {
     "source": "pixabay",
-    "id": "pixabay:5899099",
-    "query": "tokyo autumn",
-    "photographer": "Takatoshikun",
-    "url": "https://pixabay.com/photos/street-road-cars-traffic-buildings-5899099/"
+    "id": "pixabay:8055647",
+    "query": "ginkgo autumn",
+    "photographer": "Lancier",
+    "url": "https://pixabay.com/photos/gingko-leaves-leaves-ginkgo-biloba-8055647/"
   },
   "published_media_id": null
 }
