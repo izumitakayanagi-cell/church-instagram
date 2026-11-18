@@ -1,0 +1,68 @@
+name: Instagram 自動投稿
+
+on:
+  schedule:
+    # 水曜・土曜 18:00 日本時間 (= 09:00 UTC)
+    # ※GitHub Actions の定時実行は数分〜数十分遅れることがあります
+    - cron: "0 9 * * 3,6"
+  workflow_dispatch:
+    inputs:
+      date:
+        description: "投稿日 (YYYY-MM-DD)。空欄なら今日"
+        required: false
+      dry_run:
+        description: "画像と文章を作るだけで投稿しない"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: instagram-post
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: 日本語フォントとライブラリをインストール
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq fonts-noto-cjk
+          pip install -r requirements.txt
+
+      - name: 投稿内容を作成
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: python main.py prepare ${{ inputs.date && format('--date {0}', inputs.date) || '' }}
+
+      - name: 作成した画像と文章をリポジトリに保存
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add posts state
+          git diff --cached --quiet || git commit -m "投稿を作成: ${{ inputs.date || 'today' }}"
+          git push
+
+      - name: Instagram に投稿
+        if: ${{ !inputs.dry_run }}
+        env:
+          IG_USER_ID: ${{ secrets.IG_USER_ID }}
+          IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
+        run: |
+          # Instagram が画像を取得できるよう、公開リポジトリの固定URLを渡す
+          export IMAGE_BASE_URL="https://raw.githubusercontent.com/${{ github.repository }}/$(git rev-parse HEAD)"
+          python main.py publish ${{ inputs.date && format('--date {0}', inputs.date) || '' }}
+
+      - name: 投稿結果を保存
+        if: ${{ !inputs.dry_run }}
+        run: |
+          git add posts
+          git diff --cached --quiet || git commit -m "投稿完了を記録"
+          git push
