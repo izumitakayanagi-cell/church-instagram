@@ -1,87 +1,125 @@
 # ===== 東京ソフィア長老教会 Instagram 自動投稿 設定ファイル =====
-# 「（要記入）」の箇所を実際の情報に書き換えてください。
 # ここに書いた情報だけが投稿に使われます（AIが事実を作り出さないようにするため）。
-
-church:
-  name: 東京ソフィア長老教会
-  denomination: 日本オリベットアッセンブリー
-  address: 東京都新宿区高田馬場1-33-15 TFT高田馬場駅前ビル301
-  access: JR高田馬場駅 戸山口から徒歩3分
-  website: https://tokyosophia.org
-  services:
-    - name: 日本語礼拝
-      time: 毎週日曜 11:00〜12:00（開場 10:30）
-    - name: 英語礼拝 (English Service)
-      time: 毎週日曜 14:00〜15:00（開場 13:30）
-  welcome_message: どなたでもお気軽にお越しください。初めての方も歓迎いたします。
 
 instagram:
   username: tokyosophia
   user_id: "17841445487867831"   # Metaの「API setup with Unified login」画面に表示されるID
 
-# 曜日ごとの投稿テーマ（キーは英語の曜日名: monday〜sunday）
-# GitHub Actions は水曜・土曜 18:00 (日本時間) に実行されます
-themes:
-  wednesday:
-    headline: 今週のみことば
-    instruction: >-
-      週の半ばに読む人を励ます短い黙想文を書いてください。
-      みことばから一つの気づきを、日常に結びつけて優しく語ってください。
-      最後に今週の日曜礼拝（日本語・英語）への招きを一文添えてください。
-    colors: ["#1f3b4d", "#3d6e7a"]   # 背景グラデーション（上→下）
-  saturday:
-    headline: 主日礼拝のご案内
-    instruction: >-
-      明日の日曜礼拝へのお誘いの投稿を書いてください。
-      みことばに軽く触れつつ、初めての人も安心して来られるよう温かく招いてください。
-    colors: ["#5a3e2b", "#a7774f"]
+# ===== 配信スケジュール（日本時間）=====
+# 時刻を変える場合は .github/workflows/post.yml の cron も合わせて変更してください
+schedule:
+  - { weekday: tuesday,   time: "18:00", lang: ja, theme: midweek }
+  - { weekday: wednesday, time: "18:00", lang: en, theme: midweek }
+  - { weekday: saturday,  time: "17:00", lang: ja, theme: sunday }
+  - { weekday: saturday,  time: "18:00", lang: en, theme: sunday }
 
-caption:
-  max_chars: 400          # 本文（AI生成部分）の目安文字数
-  # Instagramは1投稿あたりのハッシュタグを5個までに制限している（2025年12月〜）ため、合計5個にする
-  max_hashtags: 5
-  # 毎回必ず付けるハッシュタグ
-  fixed_hashtags:
-    - "#東京ソフィア長老教会"
-    - "#TokyoSophiaPresbyterianChurch"
-  # 候補：AIが投稿内容に合うものを毎回選ぶ（残りの枠＝3個）
-  # 教会Webサイト（tokyosophia.org）の内容から作成。自由に追加・削除してください
-  hashtag_pool:
-    # 場所
-    - "#高田馬場"
-    - "#高田馬場教会"
-    - "#新宿"
-    - "#新宿教会"
-    - "#東京の教会"
-    - "#TokyoChurch"
-    - "#TakadanobabaChurch"
-    # 教会・礼拝
-    - "#教会"
-    - "#キリスト教会"
-    - "#プロテスタント"
-    - "#長老教会"
-    - "#Presbyterian"
-    - "#礼拝"
-    - "#日曜礼拝"
-    - "#英語礼拝"
-    - "#EnglishService"
-    - "#EnglishChurchTokyo"
-    - "#InternationalChurch"
-    # 聖書・信仰
-    - "#聖書"
-    - "#みことば"
-    - "#聖書の言葉"
-    - "#聖書を読む"
-    - "#キリスト教"
-    - "#クリスチャン"
-    - "#祈り"
-    - "#BibleVerse"
-    # 人生の問い（Webサイトのテーマ）
-    - "#生きる意味"
-    - "#人生の意味"
-    - "#孤独"
-    - "#心の支え"
-    - "#初めての教会"
+# ===== 言語ごとの設定 =====
+languages:
+  ja:
+    church:
+      name: 東京ソフィア長老教会
+      denomination: 日本オリベットアッセンブリー
+      address: 東京都新宿区高田馬場1-33-15 TFT高田馬場駅前ビル301
+      access: JR高田馬場駅 戸山口から徒歩3分
+      website: https://tokyosophia.org
+      services:
+        - name: 日本語礼拝
+          time: 毎週日曜 11:00〜12:00（開場 10:30）
+      welcome_message: どなたでもお気軽にお越しください。初めての方も歓迎いたします。
+    themes:
+      midweek:
+        headline: 今週のみことば
+        instruction: >-
+          週の半ばに読む人を励ます短い黙想文を書いてください。
+          みことばから一つの気づきを、日常に結びつけて優しく語ってください。
+          最後に今週の日曜の日本語礼拝への招きを一文添えてください。
+      sunday:
+        headline: 主日礼拝のご案内
+        instruction: >-
+          明日の日曜の日本語礼拝へのお誘いの投稿を書いてください。
+          みことばに軽く触れつつ、初めての人も安心して来られるよう温かく招いてください。
+    caption:
+      max_chars: 400
+      max_hashtags: 5      # Instagramは1投稿5個まで（2025年12月〜）
+      fixed_hashtags:
+        - "#東京ソフィア長老教会"
+        - "#TokyoSophiaPresbyterianChurch"
+      hashtag_pool:        # AIが内容に合うものを毎回選ぶ（tokyosophia.org の内容から作成）
+        - "#高田馬場"
+        - "#高田馬場教会"
+        - "#新宿"
+        - "#新宿教会"
+        - "#東京の教会"
+        - "#教会"
+        - "#キリスト教会"
+        - "#プロテスタント"
+        - "#長老教会"
+        - "#礼拝"
+        - "#日曜礼拝"
+        - "#聖書"
+        - "#みことば"
+        - "#聖書の言葉"
+        - "#聖書を読む"
+        - "#キリスト教"
+        - "#クリスチャン"
+        - "#祈り"
+        - "#生きる意味"
+        - "#人生の意味"
+        - "#孤独"
+        - "#心の支え"
+        - "#初めての教会"
+
+  en:
+    church:
+      name: Tokyo Sophia Presbyterian Church
+      denomination: Olivet Assembly of Japan
+      address: TFT Takadanobaba Ekimae Bldg. 301, 1-33-15 Takadanobaba, Shinjuku-ku, Tokyo
+      access: 3 min walk from JR Takadanobaba Station (Toyama Exit)
+      website: https://tokyosophia.org/en/
+      services:
+        - name: English Service
+          time: Every Sunday 14:00–15:00 (doors open 13:30)
+      welcome_message: Everyone is welcome — first-time visitors, too!
+    themes:
+      midweek:
+        headline: Verse of the Week
+        instruction: >-
+          Write a short, encouraging midweek devotional.
+          Draw one insight from the verse and gently connect it to everyday life.
+          End with a one-sentence invitation to this Sunday's English Service.
+      sunday:
+        headline: Sunday Worship
+        instruction: >-
+          Write a warm invitation to tomorrow's English Service.
+          Touch lightly on the verse, and help first-time visitors and people new to Tokyo feel at ease.
+    caption:
+      max_chars: 600       # 英語は文字数が多くなるため
+      verse_suffix: " (ESV)"   # 英語の章節の後ろに付ける（ESVの引用規定）
+      max_hashtags: 5
+      fixed_hashtags:
+        - "#TokyoSophiaPresbyterianChurch"
+        - "#EnglishChurchTokyo"
+      hashtag_pool:
+        - "#TokyoChurch"
+        - "#ChurchInTokyo"
+        - "#Takadanobaba"
+        - "#Shinjuku"
+        - "#InternationalChurch"
+        - "#EnglishService"
+        - "#SundayWorship"
+        - "#Presbyterian"
+        - "#BibleVerse"
+        - "#VerseOfTheWeek"
+        - "#Scripture"
+        - "#Faith"
+        - "#Christian"
+        - "#ChristianLife"
+        - "#Prayer"
+        - "#Hope"
+        - "#TokyoLife"
+        - "#ExpatsInTokyo"
+        - "#LivingInTokyo"
+        - "#MeaningOfLife"
 
 ai:
   model: claude-opus-5-5
@@ -90,8 +128,24 @@ ai:
 image:
   width: 1080
   height: 1350             # 4:5 縦長（Instagram推奨）
+  overlay_opacity: 0.55    # 背景写真にかける暗い幕の濃さ（0〜1）
+  # 写真が取れないときの背景色（上→下のグラデーション）
+  fallback_colors:
+    midweek: ["#1f3b4d", "#3d6e7a"]
+    sunday: ["#5a3e2b", "#a7774f"]
   # 上から順に存在するフォントを使います
   fonts:
     - /usr/share/fonts/opentype/noto/NotoSerifCJK-Bold.ttc      # GitHub Actions (Ubuntu)
     - /System/Library/Fonts/ヒラギノ明朝 ProN.ttc                 # macOS
     - /System/Library/Fonts/Hiragino Sans GB.ttc                # macOS 予備
+
+# ===== 背景写真 =====
+# 1) backgrounds/<季節>/ に自分の写真（.jpg/.png）を入れると、そちらを優先して使います
+#    季節フォルダ名: spring(3-5月) summer(6-8月) autumn(9-11月) winter(12-2月)
+# 2) なければ Pixabay（商用無料・クレジット不要）から季節に合う写真を自動で選びます
+backgrounds:
+  search_queries:
+    spring: ["tokyo cherry blossom", "sakura japan", "tokyo spring"]
+    summer: ["tokyo skyline", "tokyo summer", "japan garden green"]
+    autumn: ["tokyo autumn", "japan autumn leaves", "ginkgo autumn"]
+    winter: ["tokyo night", "tokyo illumination", "japan winter"]

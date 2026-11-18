@@ -1,20 +1,34 @@
 # ===== 投稿に使う聖句リスト =====
 # 聖句の本文はAIに書かせず、必ずこのリストから引用します（誤引用を防ぐため）。
-# 下記は口語訳（1955年、著作権保護期間満了）です。投稿前に教会で使用している聖書と照合し、
-# 必要に応じて差し替え・追加してください。新共同訳・新改訳などを使う場合は各出版社の引用規定を確認してください。
-# 使用履歴は state/history.json に記録され、最近使っていない聖句から順に選ばれます。
+# 日本語：口語訳（1955年、著作権保護期間満了）
+# 英語　：English Standard Version（ESV）
+#   ESV® Bible © 2001 by Crossway。教会の掲示物・SNSなど非売品での引用は、引用の後に「(ESV)」を付ければ許可不要
+#   （Crossway の引用規定、合計500節まで）。章節の後ろに (ESV) を自動で付けます。https://www.esv.org/ で本文を確認してください。
+# 教会で使用している聖書と照合し、必要に応じて差し替え・追加してください。
+# 他の訳（新改訳・新共同訳・ESV・NIV など）を使う場合は各出版社の引用規定を確認してください。
+# 使用履歴は state/history.json に記録され、言語ごとに最近使っていない聖句から順に選ばれます。
 
 - ref: ヨハネによる福音書 3章16節
   text: 神はそのひとり子を賜わったほどに、この世を愛して下さった。それは御子を信じる者がひとりも滅びないで、永遠の命を得るためである。
+  ref_en: John 3:16
+  text_en: For God so loved the world, that he gave his only Son, that whoever believes in him should not perish but have eternal life.
 
 - ref: 詩篇 23篇1節
   text: 主はわたしの牧者であって、わたしには乏しいことがない。
+  ref_en: Psalm 23:1
+  text_en: The LORD is my shepherd; I shall not want.
 
 - ref: マタイによる福音書 11章28節
   text: すべて重荷を負うて苦労している者は、わたしのもとにきなさい。あなたがたを休ませてあげよう。
+  ref_en: Matthew 11:28
+  text_en: Come to me, all who labor and are heavy laden, and I will give you rest.
 
 - ref: イザヤ書 41章10節
   text: 恐れてはならない、わたしはあなたと共にいる。驚いてはならない、わたしはあなたの神である。わたしはあなたを強くし、あなたを助け、わが勝利の右の手をもって、あなたをささえる。
+  ref_en: Isaiah 41:10
+  text_en: Fear not, for I am with you; be not dismayed, for I am your God; I will strengthen you, I will help you, I will uphold you with my righteous right hand.
 
 - ref: コリント人への第一の手紙 13章4節
   text: 愛は寛容であり、愛は情深い。また、ねたむことをしない。愛は高ぶらない、誇らない、
+  ref_en: 1 Corinthians 13:4
+  text_en: Love is patient and kind; love does not envy or boast; it is not arrogant
