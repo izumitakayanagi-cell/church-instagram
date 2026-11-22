@@ -1,0 +1,7 @@
+__pycache__/
+.venv/
+.env
+missed_report.md
+写真/
+review/
+.DS_Store

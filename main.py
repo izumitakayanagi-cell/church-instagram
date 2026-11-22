@@ -99,6 +99,13 @@ def cmd_prepare(post_date: date, lang: str, skip_ai: bool, remake: bool = False)
     slot = find_slot(config, post_date, lang)
     lc = config["languages"][lang]
     theme_key = slot["theme"]
+    if theme_key == "report":
+        # 日曜礼拝の報告は、Mac の確認ページ（sunday_review.py）で承認された内容を使う
+        if os.path.exists(os.path.join(post_dir(post_date, lang), "meta.json")):
+            print(f"{post_date} {lang}：日曜の確認ページで承認された内容を使います。")
+        else:
+            print(f"{post_date} {lang}：日曜の確認ページでまだ承認されていません。")
+        return
     theme = lc["themes"][theme_key]
 
     out = post_dir(post_date, lang)
@@ -165,12 +172,13 @@ def cmd_publish(post_date: date, lang: str) -> None:
         return
 
     base = os.environ["IMAGE_BASE_URL"].rstrip("/")  # 例: https://raw.githubusercontent.com/OWNER/REPO/<commit>
-    image_url = f"{base}/posts/{os.path.basename(out)}/image.jpg"
+    names = meta.get("images") or ["image.jpg"]  # 日曜礼拝の報告は複数枚
+    image_urls = [f"{base}/posts/{os.path.basename(out)}/{n}" for n in names]
     with open(os.path.join(out, "caption.txt"), encoding="utf-8") as f:
         caption = f.read()
 
     ig_user_id = os.environ.get("IG_USER_ID") or str(load_yaml("config.yaml").get("instagram", {}).get("user_id", ""))
-    media_id = instagram.publish_image(ig_user_id, os.environ["IG_ACCESS_TOKEN"], image_url, caption)
+    media_id = instagram.publish_images(ig_user_id, os.environ["IG_ACCESS_TOKEN"], image_urls, caption)
     meta["published_media_id"] = media_id
     meta["published_at"] = datetime.now(JST).isoformat(timespec="seconds")
     with open(meta_path, "w", encoding="utf-8") as f:

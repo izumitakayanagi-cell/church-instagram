@@ -43,19 +43,8 @@ def find_ig_user_id(token: str) -> str:
     return data[0]["id"]
 
 
-def publish_image(ig_user_id: str, token: str, image_url: str, caption: str) -> str:
-    API = _api(token)
-    if not ig_user_id:
-        ig_user_id = find_ig_user_id(token)
-
-    # 1. メディアコンテナ作成（Instagram側が image_url から画像を取得する）
-    container = _check(requests.post(
-        f"{API}/{ig_user_id}/media",
-        data={"image_url": image_url, "caption": caption, "access_token": token},
-        timeout=60,
-    ))["id"]
-
-    # 2. 処理完了を待つ
+def _wait(API: str, container: str, token: str) -> None:
+    """メディアの処理が終わるまで待つ。"""
     for _ in range(30):
         status = _check(requests.get(
             f"{API}/{container}",
@@ -63,14 +52,48 @@ def publish_image(ig_user_id: str, token: str, image_url: str, caption: str) -> 
             timeout=30,
         )).get("status_code")
         if status == "FINISHED":
-            break
+            return
         if status in ("ERROR", "EXPIRED"):
             raise RuntimeError(f"メディア処理に失敗しました: {status}")
         time.sleep(5)
-    else:
-        raise RuntimeError("メディア処理がタイムアウトしました")
+    raise RuntimeError("メディア処理がタイムアウトしました")
 
-    # 3. 公開
+
+def publish_image(ig_user_id: str, token: str, image_url: str, caption: str) -> str:
+    return publish_images(ig_user_id, token, [image_url], caption)
+
+
+def publish_images(ig_user_id: str, token: str, image_urls: list[str], caption: str) -> str:
+    """1枚なら通常の投稿、2枚以上ならカルーセル（複数枚）投稿にする。"""
+    API = _api(token)
+    if not ig_user_id:
+        ig_user_id = find_ig_user_id(token)
+
+    if len(image_urls) == 1:
+        # Instagram側が image_url から画像を取得する
+        container = _check(requests.post(
+            f"{API}/{ig_user_id}/media",
+            data={"image_url": image_urls[0], "caption": caption, "access_token": token},
+            timeout=60,
+        ))["id"]
+    else:
+        children = []
+        for url in image_urls[:10]:
+            cid = _check(requests.post(
+                f"{API}/{ig_user_id}/media",
+                data={"image_url": url, "is_carousel_item": "true", "access_token": token},
+                timeout=60,
+            ))["id"]
+            _wait(API, cid, token)
+            children.append(cid)
+        container = _check(requests.post(
+            f"{API}/{ig_user_id}/media",
+            data={"media_type": "CAROUSEL", "children": ",".join(children),
+                  "caption": caption, "access_token": token},
+            timeout=60,
+        ))["id"]
+
+    _wait(API, container, token)
     return _check(requests.post(
         f"{API}/{ig_user_id}/media_publish",
         data={"creation_id": container, "access_token": token},
