@@ -1,13 +1,14 @@
 name: Instagram 自動投稿
 # 一覧に表示される名前（どの実行か見分けやすくする）
-run-name: ${{ github.event_name == 'schedule' && '定時チェック（予定があれば投稿）' || format('{0} {1} {2}{3}', inputs.date || '今日', inputs.lang == 'en' && '英語' || '日本語', inputs.dry_run && '試し作成' || '投稿', inputs.remake && '（作り直し）' || '') }}
+run-name: ${{ (github.event_name == 'schedule' || inputs.auto) && '定時チェック（予定があれば投稿）' || format('{0} {1} {2}{3}', inputs.date || '今日', inputs.lang == 'en' && '英語' || '日本語', inputs.dry_run && '試し作成' || '投稿', inputs.remake && '（作り直し）' || '') }}
 
 on:
   schedule:
-    # 毎日 17:00 と 18:00（日本時間）に起動し、config.yaml の予定に合うものがあれば投稿する
-    # 時刻はUTC表記（日本時間 − 9時間）。GitHubの都合で数分〜数十分遅れることがあります
-    - cron: "0 8 * * *"   # 17:00 日本時間
-    - cron: "0 9 * * *"   # 18:00 日本時間
+    # 毎日 16:13〜20:43（日本時間）に30分おきに起動し、config.yaml の予定で
+    # 「予定時刻から3時間以内・未投稿」のものがあれば投稿する。
+    # GitHubの定時実行は遅れたり飛ばされたりすることがあるため、何度も確認している。
+    # 混雑する「0分ちょうど」を避けて13分・43分にしている。時刻はUTC表記（日本時間 − 9時間）
+    - cron: "13,43 7-11 * * *"
   workflow_dispatch:
     inputs:
       lang:
@@ -26,9 +27,14 @@ on:
         description: "作成済み（未投稿）の画像と文章を作り直す"
         type: boolean
         default: false
+      auto:
+        description: "定時チェックとして動かす（予定表どおりに投稿。他の項目は無視）"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
+  issues: write   # 投稿漏れをIssueで知らせる（GitHubからメールが届く）
 
 concurrency:
   group: instagram-post
@@ -38,7 +44,7 @@ jobs:
   post:
     runs-on: ubuntu-latest
     env:
-      IS_SCHEDULE: ${{ github.event_name == 'schedule' }}
+      IS_SCHEDULE: ${{ github.event_name == 'schedule' || inputs.auto }}
       LANG_CODE: ${{ inputs.lang || 'ja' }}
       DATE_ARG: ${{ inputs.date && format('--date {0}', inputs.date) || '' }}
       REMAKE_ARG: ${{ inputs.remake && '--remake' || '' }}
@@ -75,7 +81,7 @@ jobs:
           git pull --rebase && git push
 
       - name: Instagram に投稿
-        if: ${{ !inputs.dry_run }}
+        if: ${{ !inputs.dry_run || inputs.auto }}
         env:
           IG_USER_ID: ${{ secrets.IG_USER_ID }}
           IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
@@ -88,9 +94,19 @@ jobs:
             python main.py publish --lang "$LANG_CODE" $DATE_ARG
           fi
 
-      - name: 投稿結果を保存
-        if: ${{ !inputs.dry_run }}
+      - name: 投稿漏れの確認
+        if: ${{ always() && (github.event_name == 'schedule' || inputs.auto) }}
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          git add posts
-          git diff --cached --quiet || git commit -m "投稿完了を記録"
+          python main.py check-missed
+          if [ -f missed_report.md ]; then
+            gh issue create --repo "${{ github.repository }}" --title "⚠️ Instagramの予定投稿ができませんでした" --body-file missed_report.md
+          fi
+
+      - name: 投稿結果を保存
+        if: ${{ always() && (!inputs.dry_run || inputs.auto) }}
+        run: |
+          git add -A posts state
+          git diff --cached --quiet || git commit -m "投稿結果を記録"
           git pull --rebase && git push
