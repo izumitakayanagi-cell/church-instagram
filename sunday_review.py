@@ -122,6 +122,9 @@ class Review:
         for lang in LANGS:
             d = data[lang]
             self.s[lang].update({"caption": d["caption"], "photos": d["photos"], "skip": d["skip"]})
+        self.save()
+        for lang in LANGS:
+            d = data[lang]
             if d["skip"]:
                 continue
             if not (1 <= len(d["photos"]) <= MAX_PHOTOS):
@@ -218,7 +221,7 @@ function render(){
     opts += `<option value="" ${st.sermon===null?'selected':''}>（説教なし）</option>`;
     const photos = S.photos.length ? S.photos.map((p,i)=>{
       const k = st.photos.indexOf(i);
-      return `<div class="ph ${k>=0?'sel':''}" onclick="pick('${lang}',${i})"><img src="/thumb/${i}" loading="lazy"><span class="n">${k+1}</span></div>`}).join('')
+      return `<div class="ph ${k>=0?'sel':''}" onclick="pick('${lang}',${i})"><img src="/thumb/${i}?v=${encodeURIComponent(p.split('/').pop())}" loading="lazy"><span class="n">${k+1}</span></div>`}).join('')
       : '<p class="hint">この日に撮影された写真が「写真」フォルダにありません。写真を入れてから、このページを再読み込みしてください。</p>';
     sec.innerHTML = `<h2>${NAMES[lang]}</h2>
       <div class="${st.skip?'off':''}">
@@ -239,7 +242,7 @@ async function regen(lang){msg('文章を作っています…（30秒ほど）'
 async function approve(){
   if(!confirm('この内容で月曜6:00の投稿を予約しますか？'))return;
   msg('写真を準備してGitHubに送っています…');
-  try{const j=await post('/api/approve',{ja:S.ja,en:S.en});msg(j.message+' このページは閉じて大丈夫です。',true)}catch(e){msg(e.message)}
+  try{const j=await post('/api/approve',{ja:S.ja,en:S.en});msg(j.message+' このページは閉じて大丈夫です。',true);alert('✅ '+j.message)}catch(e){msg(e.message);alert('⚠️ '+e.message)}
 }
 render();
 </script></body></html>"""
@@ -272,13 +275,13 @@ def make_handler(rv: Review):
                 self.wfile.write(b)
             elif self.path.startswith("/thumb/"):
                 try:
-                    b = report.thumbnail(rv.s["photos"][int(self.path.split("/")[-1])])
+                    b = report.thumbnail(rv.s["photos"][int(self.path.split("?")[0].split("/")[-1])])
                 except Exception:
                     self.send_error(404)
                     return
                 self.send_response(200)
                 self.send_header("Content-Type", "image/jpeg")
-                self.send_header("Cache-Control", "max-age=3600")
+                self.send_header("Cache-Control", "no-store")
                 self.end_headers()
                 self.wfile.write(b)
             else:
