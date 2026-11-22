@@ -194,14 +194,65 @@ def cmd_auto(stage: str) -> None:
             cmd_publish(now.date(), s["lang"])
 
 
+MISSED_STATE = os.path.join(ROOT, "state", "missed.json")
+MISSED_REPORT = os.path.join(ROOT, "missed_report.md")
+
+
+def cmd_check_missed() -> None:
+    """今日・昨日の予定のうち、投稿できる時間（予定時刻＋3時間）を過ぎても投稿されていないものを報告する。
+    見つかったら missed_report.md を書き出す（ワークフローがGitHubのIssueにして、メールで知らせる）。"""
+    config = load_yaml("config.yaml")
+    now = datetime.now(JST)
+    reported = []
+    if os.path.exists(MISSED_STATE):
+        with open(MISSED_STATE, encoding="utf-8") as f:
+            reported = json.load(f)
+    new = []
+    for d in (now.date() - timedelta(days=1), now.date()):
+        for s in config.get("schedule", []):
+            if not _matches(s, d):
+                continue
+            hh, mm = map(int, str(s["time"]).split(":"))
+            slot_dt = datetime(d.year, d.month, d.day, hh, mm, tzinfo=JST)
+            key = f"{d.isoformat()} {s['time']} {s['lang']}"
+            if now <= slot_dt + timedelta(hours=3) or key in reported:
+                continue
+            meta_path = os.path.join(post_dir(d, s["lang"]), "meta.json")
+            published = None
+            if os.path.exists(meta_path):
+                with open(meta_path, encoding="utf-8") as f:
+                    published = json.load(f).get("published_media_id")
+            if not published:
+                new.append(key)
+    if not new:
+        print("投稿漏れはありません。")
+        return
+    lang_name = {"ja": "日本語", "en": "英語"}
+    lines = ["次の予定の投稿が、時間内に行われませんでした。", ""]
+    for k in new:
+        d, t, lang = k.split()
+        lines.append(f"- {d} {t} {lang_name.get(lang, lang)}")
+    lines += ["", "考えられる原因：GitHubの定時実行が大幅に遅れた、またはエラーで止まった。",
+              "Actions タブで、その時間帯の実行結果を確認してください。"]
+    with open(MISSED_REPORT, "w", encoding="utf-8") as f:
+        f.write("\n".join(lines) + "\n")
+    os.makedirs(os.path.dirname(MISSED_STATE), exist_ok=True)
+    with open(MISSED_STATE, "w", encoding="utf-8") as f:
+        json.dump((reported + new)[-100:], f, ensure_ascii=False, indent=2)
+    print("\n".join(lines))
+
+
 def main() -> None:
     p = argparse.ArgumentParser()
-    p.add_argument("command", choices=["prepare", "publish", "auto-prepare", "auto-publish"])
+    p.add_argument("command", choices=["prepare", "publish", "auto-prepare", "auto-publish", "check-missed"])
     p.add_argument("--lang", choices=["ja", "en"])
     p.add_argument("--date", help="YYYY-MM-DD（省略時は日本時間の今日）")
     p.add_argument("--skip-ai", action="store_true")
     p.add_argument("--remake", action="store_true", help="未投稿の内容を作り直す")
     a = p.parse_args()
+    if a.command == "check-missed":
+        cmd_check_missed()
+        return
     if a.command.startswith("auto-"):
         cmd_auto(a.command.split("-", 1)[1])
         return

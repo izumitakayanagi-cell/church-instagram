@@ -6,8 +6,9 @@ instagram:
   user_id: "17841445487867831"   # Metaの「API setup with Unified login」画面に表示されるID
 
 # ===== 配信スケジュール（日本時間）=====
-# GitHub は毎日 17:00 と 18:00 に起動し、その時刻の予定があれば投稿します。
-# 17時・18時以外の時刻にする場合は .github/workflows/post.yml の cron に時刻を追加してください。
+# GitHub は毎日 16時台〜20時台に30分おきに起動し、予定時刻から3時間以内で未投稿のものがあれば投稿します。
+# （GitHubの定時実行は遅れたり飛ばされたりすることがあるため、何度も確認する仕組みにしています）
+# この時間帯以外にする場合は .github/workflows/post.yml の cron を変更してください。
 # 毎週の予定は weekday、1回だけの臨時投稿は date（YYYY-MM-DD）で書きます。
 schedule:
   - { weekday: tuesday,   time: "18:00", lang: ja, theme: midweek }
