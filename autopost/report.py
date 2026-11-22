@@ -87,13 +87,27 @@ def _taken_date(path: str) -> date | None:
     return datetime.fromtimestamp(os.path.getmtime(path)).date()
 
 
+_DATE_IN_NAME = re.compile(r"(20\d{2})(\d{2})(\d{2})")
+
+
+def photo_date(path: str) -> date | None:
+    """写真の日付：ファイル名の日付（例 20261122）を最優先し、なければ撮影日。"""
+    m = _DATE_IN_NAME.search(_nfc(os.path.basename(path)))
+    if m:
+        try:
+            return date(int(m[1]), int(m[2]), int(m[3]))
+        except ValueError:
+            pass
+    return _taken_date(path)
+
+
 def find_photos(d: date, photo_dir: str = PHOTO_DIR) -> list[str]:
     files = []
     for root, _, names in os.walk(photo_dir):
         for n in names:
             if n.lower().endswith(PHOTO_EXT) and not n.startswith("."):
                 files.append(os.path.join(root, n))
-    return sorted(p for p in files if _taken_date(p) == d)
+    return sorted((p for p in files if photo_date(p) == d), key=lambda p: _nfc(os.path.basename(p)))
 
 
 def _open_any(path: str) -> Image.Image:
