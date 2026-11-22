@@ -159,6 +159,10 @@ class Review:
         if not written:
             return "今週は投稿しない設定にしました。"
         push_to_github(written, f"日曜礼拝の報告を予約: {self.date.isoformat()}")
+        slot = datetime(self.monday.year, self.monday.month, self.monday.day, 6, 0)
+        if datetime.now() >= slot:
+            return ("予約しました。予定の6:00を過ぎているので、GitHubの次の確認"
+                    "（毎時13分・43分ごろ、9:00まで）で投稿されます。")
         return f"{self.monday.month}月{self.monday.day}日（月）6:00 に投稿されるよう予約しました。"
 
 
