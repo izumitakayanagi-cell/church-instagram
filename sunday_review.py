@@ -72,7 +72,7 @@ class Review:
             with open(self.path, encoding="utf-8") as f:
                 self.s = json.load(f)
             # 写真や説教ファイルが後から増えていたら取り込む
-            self.s["photos"] = sorted(set(self.s["photos"]) | set(report.find_photos(service_date)))
+            self.s["photos"] += [p for p in report.find_photos(service_date) if p not in self.s["photos"]]
             known = {x["path"] for x in self.s["sermons"]}
             self.s["sermons"] += [x for x in report.find_sermons(service_date) if x["path"] not in known]
         else:
@@ -84,6 +84,13 @@ class Review:
                 cand = [i for i, x in enumerate(self.s["sermons"]) if x["lang"] == lang]
                 self.s[lang] = {"sermon": cand[0] if cand else None, "caption": "", "photos": [], "skip": False}
         self.save()
+
+    def refresh_photos(self) -> None:
+        """ページを開き直したときに、後から入れた写真も表示されるようにする。"""
+        new = [p for p in report.find_photos(self.date) if p not in self.s["photos"]]
+        if new:
+            self.s["photos"] += sorted(new)  # 既存の番号（選択済み）は変えない
+            self.save()
 
     def save(self) -> None:
         os.makedirs(REVIEW_DIR, exist_ok=True)
@@ -252,6 +259,8 @@ def make_handler(rv: Review):
 
         def do_GET(self):
             if self.path == "/":
+                with rv.lock:
+                    rv.refresh_photos()
                 html = (PAGE.replace("__STATE__", json.dumps(rv.s, ensure_ascii=False).replace("</", "<\\/"))
                         .replace("__DATE__", f"{rv.date.month}月{rv.date.day}日（日）")
                         .replace("__MONDAY__", f"{rv.monday.month}月{rv.monday.day}日（月）")
