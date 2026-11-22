@@ -71,8 +71,14 @@ def find_slot(config: dict, post_date: date, lang: str) -> dict:
     return {"time": "臨時", "lang": lang, "theme": "midweek"}
 
 
+def _grace(s: dict) -> timedelta:
+    """予定時刻から、どれだけ遅れても投稿してよいか。
+    GitHub の定時実行は何時間も遅れることがあるため、礼拝報告（内容が時刻に左右されない）は長めにとる。"""
+    return timedelta(hours=15) if s.get("theme") == "report" else timedelta(hours=3)
+
+
 def due_slots(config: dict, now: datetime) -> list[dict]:
-    """今の時刻に投稿すべき予定（予定時刻の5分前〜3時間後）を返す。"""
+    """今の時刻に投稿すべき予定（予定時刻の5分前〜猶予時間）を返す。"""
     today = now.date()
     out = []
     for s in config.get("schedule", []):
@@ -80,7 +86,7 @@ def due_slots(config: dict, now: datetime) -> list[dict]:
             continue
         hh, mm = map(int, str(s["time"]).split(":"))
         slot_dt = datetime(today.year, today.month, today.day, hh, mm, tzinfo=JST)
-        if slot_dt - timedelta(minutes=5) <= now <= slot_dt + timedelta(hours=3):
+        if slot_dt - timedelta(minutes=5) <= now <= slot_dt + _grace(s):
             out.append(s)
     # 同じ日の日本語・英語が重なったら、時刻順→日本語→英語の順にする
     seen, result = set(), []
@@ -223,7 +229,7 @@ def cmd_check_missed() -> None:
             hh, mm = map(int, str(s["time"]).split(":"))
             slot_dt = datetime(d.year, d.month, d.day, hh, mm, tzinfo=JST)
             key = f"{d.isoformat()} {s['time']} {s['lang']}"
-            if now <= slot_dt + timedelta(hours=3) or key in reported:
+            if now <= slot_dt + _grace(s) or key in reported:
                 continue
             meta_path = os.path.join(post_dir(d, s["lang"]), "meta.json")
             published = None
