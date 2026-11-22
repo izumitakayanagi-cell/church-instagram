@@ -106,7 +106,7 @@ class Review:
         body = report.sermon_text(sermon["path"])
         if not body:
             raise RuntimeError("説教ファイルから文章を読み取れませんでした。")
-        res = report.generate_caption(self.config, lang, sermon["label"], body, self.date)
+        res = report.generate_caption(self.config, lang, sermon["label"], body, self.date, sermon["lang"])
         self.s[lang]["caption"] = report.full_caption(self.config, lang, res["body"], res["hashtags"])
 
     def prepare_drafts(self) -> None:

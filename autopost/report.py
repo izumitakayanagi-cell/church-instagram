@@ -178,7 +178,8 @@ Choose {n_tags} hashtags from the candidate list that fit the post.
 }
 
 
-def generate_caption(config: dict, lang: str, sermon_label: str, sermon_body: str, service_date: date) -> dict:
+def generate_caption(config: dict, lang: str, sermon_label: str, sermon_body: str, service_date: date,
+                     sermon_lang: str | None = None) -> dict:
     """{"body": 本文, "hashtags": [...]} を返す。"""
     lc = config["languages"][lang]
     cap = lc["caption"]
@@ -194,13 +195,17 @@ def generate_caption(config: dict, lang: str, sermon_label: str, sermon_body: st
         "required": ["body", "hashtags"],
         "additionalProperties": False,
     }
+    note = ""
+    if lang == "en" and sermon_lang == "ja":
+        note = ("\n\nNote: This week the manuscript is the Japanese sermon. Write the post in natural English, "
+                "translating the key message. Refer to it as yesterday's Sunday service (not specifically the English Service).")
     client = anthropic.Anthropic()
     resp = client.beta.messages.create(
         model=config["ai"]["model"],
         max_tokens=16000,
         system=PROMPT[lang].format(name=lc["church"]["name"], date=service_date.isoformat(),
                                    max_chars=rep.get("max_chars", 200 if lang == "ja" else 350),
-                                   n_tags=n_tags),
+                                   n_tags=n_tags) + note,
         messages=[{"role": "user", "content":
                    f"説教ファイル名（聖書箇所・題）: {sermon_label}\n\nハッシュタグ候補: {' '.join(pool)}\n\n"
                    f"--- 説教原稿 ---\n{sermon_body}"}],
