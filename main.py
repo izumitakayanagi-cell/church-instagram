@@ -74,9 +74,9 @@ def find_slot(config: dict, post_date: date, lang: str) -> dict:
 
 # 予定時刻から何分遅れまで投稿してよいか（6:00 の予定なら 6:59 まで）。それを過ぎたら投稿せず「投稿漏れ」として知らせる
 GRACE = timedelta(minutes=59)
-# 予定時刻の何時間前から待機を始めるか。GitHub の定時実行は何時間も遅れることがあるため、
-# 予定のずっと前に起動しておき、予定時刻ちょうどまで待ってから投稿する
-LEAD = timedelta(hours=12)
+# 予定時刻の何分前から待機を始めるか。起動は Google Cloud Scheduler（毎時50分）が行うので、
+# 予定時刻の少し前に起動し、予定時刻ちょうどまで待ってから投稿する
+LEAD = timedelta(minutes=70)
 # 1回の実行で待てる時間。GitHub の1ジョブの上限（6時間）より短くし、足りなければ次の実行に引き継ぐ
 JOB_BUDGET = timedelta(hours=5, minutes=15)
 
@@ -341,7 +341,7 @@ def _publish_slot(t: datetime, s: dict) -> None:
 
 
 def cmd_upcoming() -> None:
-    """12時間以内に未投稿の予定がいくつあるか（ワークフローが準備の要否を判断するため）。"""
+    """70分以内に未投稿の予定がいくつあるか（ワークフローが準備の要否を判断するため）。"""
     slots = upcoming_slots(load_yaml("config.yaml"), _now())
     for t, s in slots:
         print(f"# {t:%m/%d %H:%M} {s['lang']} {s['theme']}", file=sys.stderr)
@@ -359,7 +359,7 @@ def cmd_scheduler() -> None:
         slots = [(t, s) for t, s in upcoming_slots(config, _now())
                  if (t.date().isoformat(), s["lang"]) not in handled]
         if not slots:
-            print(f"{_now():%m/%d %H:%M} 現在、これから投稿する予定（12時間以内）はありません。")
+            print(f"{_now():%m/%d %H:%M} 現在、これから投稿する予定（70分以内）はありません。")
             return
         t, s = slots[0]
         key = (t.date().isoformat(), s["lang"])
@@ -424,7 +424,7 @@ def cmd_check_missed() -> None:
     for k in new:
         d, t, lang = k.split()
         lines.append(f"- {d} {t} {lang_name.get(lang, lang)}")
-    lines += ["", "考えられる原因：GitHubの起動が予定の12時間前から一度も行われなかった、またはエラーで止まった。",
+    lines += ["", "考えられる原因：Google Cloud Scheduler からの起動が届かなかった（GitHub のトークンの期限切れなど）、またはエラーで止まった。",
               "Actions タブで、その時間帯の実行結果を確認してください。"]
     with open(MISSED_REPORT, "w", encoding="utf-8") as f:
         f.write("\n".join(lines) + "\n")

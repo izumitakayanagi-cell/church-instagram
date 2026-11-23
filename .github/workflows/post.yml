@@ -1,29 +1,19 @@
 name: Instagram 自動投稿
 # 一覧に表示される名前（どの実行か見分けやすくする）
-run-name: ${{ github.event_name == 'schedule' && format('定時チェック（起動設定 {0}）', github.event.schedule) || (github.event_name != 'workflow_dispatch' || inputs.auto) && format('定時チェック（{0}）', github.event_name == 'push' && '承認の送信で起動' || inputs.relay && '待機の引き継ぎ' || '手動') || format('{0} {1} {2}{3}', inputs.date || '今日', inputs.lang == 'en' && '英語' || '日本語', inputs.dry_run && '試し作成' || '投稿', inputs.remake && '（作り直し）' || '') }}
+run-name: ${{ github.event_name == 'schedule' && format('定時チェック（起動設定 {0}）', github.event.schedule) || (github.event_name != 'workflow_dispatch' || inputs.auto) && format('定時チェック（{0}）', github.event_name == 'push' && '承認の送信で起動' || inputs.relay && '待機の引き継ぎ' || inputs.via || '手動') || format('{0} {1} {2}{3}', inputs.date || '今日', inputs.lang == 'en' && '英語' || '日本語', inputs.dry_run && '試し作成' || '投稿', inputs.remake && '（作り直し）' || '') }}
 
 # ===== 予定時刻ちょうどに投稿する仕組み =====
-# GitHub の定時実行（cron）は、混雑時に何時間も遅れたり取りやめられたりする（GitHubの説明書に明記）。
-# そのため cron には「投稿」ではなく「起動」だけを任せる：
-#   1. 3時間おきに起動を試みる。予定の12時間前から予定時刻までの間に、どれか1回でも起動すればよい
-#   2. 起動した実行が、文章と画像を作っておき、予定時刻ちょうどまで待って投稿する
-#   3. 1回の実行は6時間までなので、待ち時間が長いときは次の実行に待機を引き継ぐ
-#   4. すでに待機中の実行があれば、新しく起動した分は何もせずに終わる
+# 起動は Google Cloud Scheduler（時刻どおりに動く予約サービス）が毎時50分に行う
+# （GitHub の定時起動 cron は、遅れたり起動しなかったりしたため、予備としてのみ使う）。
+#   1. 起動した実行は、70分以内に予定があれば、文章と画像を作って予定時刻ちょうどまで待って投稿する
+#   2. 予定がなければ何もせずに終わる
+#   3. すでに待機中の実行があれば、新しく起動した分は何もせずに終わる
 # 予定時刻を59分過ぎても投稿できなかった場合は投稿せず、GitHubのIssue（メール）で知らせる。
 on:
   schedule:
-    # 3時間おき。1行に1つの時刻だけを書く（11/19〜22 はこの書き方で毎回起動していた）
-    # 時刻は UTC（日本時間 − 9時間）。混雑する「0分ちょうど」を避けて17分にしている
-    - cron: "17 15 * * *"   # 日本時間  0:17
-    - cron: "17 18 * * *"   # 日本時間  3:17
-    - cron: "17 21 * * *"   # 日本時間  6:17
-    - cron: "17 0 * * *"    # 日本時間  9:17
-    - cron: "17 3 * * *"    # 日本時間 12:17
-    - cron: "17 6 * * *"    # 日本時間 15:17
-    - cron: "17 9 * * *"    # 日本時間 18:17
-    - cron: "17 12 * * *"   # 日本時間 21:17
+    - cron: "17 * * * *"     # 予備（GitHub の定時起動。届けば59分以内の遅れとして投稿する）
   push:
-    paths: ["posts/**"]      # Mac の確認ページで月曜の投稿を承認したとき、すぐに待機を始める
+    paths: ["posts/**"]      # Mac の確認ページで月曜の投稿を承認したとき
   workflow_dispatch:
     inputs:
       lang:
@@ -50,6 +40,9 @@ on:
         description: "（自動で使用）待機の引き継ぎ。手動では使いません"
         type: boolean
         default: false
+      via:
+        description: "（自動で使用）起動元。手動では空欄のまま"
+        required: false
 
 jobs:
   # すでに待機中の実行があるか確認する（あれば新しい実行は何もしない）
