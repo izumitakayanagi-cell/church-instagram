@@ -1,20 +1,20 @@
 name: Instagram 自動投稿
 # 一覧に表示される名前（どの実行か見分けやすくする）
-run-name: ${{ (github.event_name != 'workflow_dispatch' || inputs.auto) && '定時チェック（予定があれば投稿）' || format('{0} {1} {2}{3}', inputs.date || '今日', inputs.lang == 'en' && '英語' || '日本語', inputs.dry_run && '試し作成' || '投稿', inputs.remake && '（作り直し）' || '') }}
+run-name: ${{ (github.event_name != 'workflow_dispatch' || inputs.auto) && '定時チェック（予定の時刻まで待って投稿）' || format('{0} {1} {2}{3}', inputs.date || '今日', inputs.lang == 'en' && '英語' || '日本語', inputs.dry_run && '試し作成' || '投稿', inputs.remake && '（作り直し）' || '') }}
 
+# ===== 予定時刻ちょうどに投稿する仕組み =====
+# GitHub の定時実行（cron）は、混雑時に何時間も遅れたり取りやめられたりする（GitHubの説明書に明記）。
+# そのため cron には「投稿」ではなく「起動」だけを任せる：
+#   1. 30分おきに起動を試みる。予定の12時間前から予定時刻までの間に、どれか1回でも起動すればよい
+#   2. 起動した実行が、文章と画像を作っておき、予定時刻ちょうどまで待って投稿する
+#   3. 1回の実行は6時間までなので、待ち時間が長いときは次の実行に待機を引き継ぐ
+#   4. すでに待機中の実行があれば、新しく起動した分は何もせずに終わる
+# 予定時刻を59分過ぎても投稿できなかった場合は投稿せず、GitHubのIssue（メール）で知らせる。
 on:
   schedule:
-    # 毎日 16:13〜20:43（日本時間）に30分おきに起動し、config.yaml の予定で
-    # 「予定時刻から3時間以内・未投稿」のものがあれば投稿する。
-    # GitHubの定時実行は遅れたり飛ばされたりすることがあるため、何度も確認している。
-    # 混雑する「0分ちょうど」を避けて13分・43分にしている。時刻はUTC表記（日本時間 − 9時間）
-    - cron: "13,43 7-11 * * *"   # 毎日 16:13〜20:43
-    - cron: "13,43 21-23 * * 0"  # 月曜 6:13〜8:43（日曜礼拝の報告）
-    - cron: "13,43 0-3 * * 1"    # 月曜 9:13〜12:43（遅れたときの予備）
-  # Mac から trigger/ フォルダを更新して送ると、すぐに「定時チェック」が動く
-  # （GitHub の定時実行は何時間も遅れることがあるため、確実に動かす手段として使う）
+    - cron: "7,37 * * * *"   # 30分おき（混雑する「0分ちょうど」を避けている）
   push:
-    paths: ["trigger/**"]
+    paths: ["posts/**"]      # Mac の確認ページで月曜の投稿を承認したとき、すぐに待機を始める
   workflow_dispatch:
     inputs:
       lang:
@@ -37,23 +37,57 @@ on:
         description: "定時チェックとして動かす（予定表どおりに投稿。他の項目は無視）"
         type: boolean
         default: false
-
-permissions:
-  contents: write
-  issues: write   # 投稿漏れをIssueで知らせる（GitHubからメールが届く）
-
-concurrency:
-  group: instagram-post
-  cancel-in-progress: false
+      relay:
+        description: "（自動で使用）待機の引き継ぎ。手動では使いません"
+        type: boolean
+        default: false
 
 jobs:
-  post:
+  # すでに待機中の実行があるか確認する（あれば新しい実行は何もしない）
+  check:
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.auto }}
     runs-on: ubuntu-latest
+    permissions:
+      actions: read
+    outputs:
+      busy: ${{ steps.busy.outputs.busy }}
+    steps:
+      - id: busy
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ "${{ inputs.relay }}" = "true" ]; then echo "busy=false" >> "$GITHUB_OUTPUT"; exit 0; fi
+          n=0
+          for st in in_progress queued; do
+            c=$(gh api "repos/${{ github.repository }}/actions/workflows/post.yml/runs?status=$st&per_page=50" \
+                --jq '[.workflow_runs[] | select(.id != ${{ github.run_id }}) | select(.display_title | startswith("定時チェック"))] | length')
+            n=$((n + c))
+          done
+          echo "他の定時チェック: $n 件"
+          echo "busy=$([ "$n" -gt 0 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+
+  post:
+    needs: check
+    if: ${{ always() && ((github.event_name == 'workflow_dispatch' && !inputs.auto) || needs.check.outputs.busy == 'false') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    concurrency:
+      group: ${{ (github.event_name == 'workflow_dispatch' && !inputs.auto) && 'instagram-manual' || 'instagram-post' }}
+      cancel-in-progress: false
+    permissions:
+      contents: write
+      issues: write    # 投稿漏れをIssueで知らせる（GitHubからメールが届く）
+      actions: write   # 待機を次の実行に引き継ぐ
     env:
-      IS_SCHEDULE: ${{ github.event_name != 'workflow_dispatch' || inputs.auto }}
+      IS_AUTO: ${{ github.event_name != 'workflow_dispatch' || inputs.auto }}
       LANG_CODE: ${{ inputs.lang || 'ja' }}
       DATE_ARG: ${{ inputs.date && format('--date {0}', inputs.date) || '' }}
       REMAKE_ARG: ${{ inputs.remake && '--remake' || '' }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY }}
+      IG_USER_ID: ${{ secrets.IG_USER_ID }}
+      IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
+      GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v4
 
@@ -62,57 +96,57 @@ jobs:
           python-version: "3.12"
           cache: pip
 
-      - name: 日本語フォントとライブラリをインストール
-        run: |
-          sudo apt-get update -qq && sudo apt-get install -y -qq fonts-noto-cjk
-          pip install -r requirements.txt
+      - run: pip install -r requirements.txt
 
-      - name: 投稿内容を作成
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY }}
-        run: |
-          if [ "$IS_SCHEDULE" = "true" ]; then
-            python main.py auto-prepare
-          else
-            python main.py prepare --lang "$LANG_CODE" $DATE_ARG $REMAKE_ARG
-          fi
+      - name: 12時間以内の予定を確認
+        id: up
+        if: ${{ env.IS_AUTO == 'true' }}
+        run: python main.py upcoming >> "$GITHUB_OUTPUT"
 
-      - name: 作成した画像と文章をリポジトリに保存
-        run: |
+      - name: 日本語フォントをインストール
+        if: ${{ env.IS_AUTO != 'true' || steps.up.outputs.count != '0' }}
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq fonts-noto-cjk
+
+      - run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: 予定の時刻まで待って投稿
+        if: ${{ env.IS_AUTO == 'true' && steps.up.outputs.count != '0' }}
+        run: python -u main.py scheduler
+
+      # ---- 手動実行（Run workflow で言語・日付を指定したとき）----
+      - name: 投稿内容を作成（手動）
+        if: ${{ env.IS_AUTO != 'true' }}
+        run: |
+          python main.py prepare --lang "$LANG_CODE" $DATE_ARG $REMAKE_ARG
           git add -A posts state
           git diff --cached --quiet || git commit -m "投稿を作成"
           git pull --rebase && git push
 
-      - name: Instagram に投稿
-        if: ${{ !inputs.dry_run || inputs.auto }}
-        env:
-          IG_USER_ID: ${{ secrets.IG_USER_ID }}
-          IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
+      - name: Instagram に投稿（手動）
+        if: ${{ env.IS_AUTO != 'true' && !inputs.dry_run }}
         run: |
           # Instagram が画像を取得できるよう、公開リポジトリの固定URLを渡す
           export IMAGE_BASE_URL="https://raw.githubusercontent.com/${{ github.repository }}/$(git rev-parse HEAD)"
-          if [ "$IS_SCHEDULE" = "true" ]; then
-            python main.py auto-publish
-          else
-            python main.py publish --lang "$LANG_CODE" $DATE_ARG
-          fi
+          python main.py publish --lang "$LANG_CODE" $DATE_ARG
 
-      - name: 投稿漏れの確認
-        if: ${{ always() && (github.event_name != 'workflow_dispatch' || inputs.auto) }}
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          python main.py check-missed
-          if [ -f missed_report.md ]; then
-            gh issue create --repo "${{ github.repository }}" --title "⚠️ Instagramの予定投稿ができませんでした" --body-file missed_report.md
-          fi
-
-      - name: 投稿結果を保存
-        if: ${{ always() && (!inputs.dry_run || inputs.auto) }}
+      - name: 投稿結果を保存（手動）
+        if: ${{ always() && env.IS_AUTO != 'true' && !inputs.dry_run }}
         run: |
           git add -A posts state
           git diff --cached --quiet || git commit -m "投稿結果を記録"
           git pull --rebase && git push
+
+      # ---- 投稿漏れの確認（予定時刻を59分過ぎても投稿されていなければメールで知らせる）----
+      - name: 投稿漏れの確認
+        if: ${{ always() && env.IS_AUTO == 'true' }}
+        run: |
+          git pull --rebase -q || true
+          python main.py check-missed
+          if [ -f missed_report.md ]; then
+            gh issue create --repo "${{ github.repository }}" --title "⚠️ Instagramの予定投稿ができませんでした" --body-file missed_report.md
+            git add -A state
+            git diff --cached --quiet || git commit -m "投稿漏れを記録"
+            git pull --rebase && git push
+          fi

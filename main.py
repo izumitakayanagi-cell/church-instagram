@@ -12,6 +12,7 @@ import argparse
 import json
 import os
 import shutil
+import subprocess
 import sys
 from datetime import date, datetime, timedelta, timezone
 
@@ -71,10 +72,64 @@ def find_slot(config: dict, post_date: date, lang: str) -> dict:
     return {"time": "臨時", "lang": lang, "theme": "midweek"}
 
 
+# 予定時刻から何分遅れまで投稿してよいか（6:00 の予定なら 6:59 まで）。それを過ぎたら投稿せず「投稿漏れ」として知らせる
+GRACE = timedelta(minutes=59)
+# 予定時刻の何時間前から待機を始めるか。GitHub の定時実行は何時間も遅れることがあるため、
+# 予定のずっと前に起動しておき、予定時刻ちょうどまで待ってから投稿する
+LEAD = timedelta(hours=12)
+# 1回の実行で待てる時間。GitHub の1ジョブの上限（6時間）より短くし、足りなければ次の実行に引き継ぐ
+JOB_BUDGET = timedelta(hours=5, minutes=15)
+
+
 def _grace(s: dict) -> timedelta:
-    """予定時刻から、どれだけ遅れても投稿してよいか。
-    GitHub の定時実行は何時間も遅れることがあるため、礼拝報告（内容が時刻に左右されない）は長めにとる。"""
-    return timedelta(hours=15) if s.get("theme") == "report" else timedelta(hours=3)
+    return GRACE
+
+
+def _slot_dt(s: dict, d: date) -> datetime:
+    hh, mm = map(int, str(s["time"]).split(":"))
+    return datetime(d.year, d.month, d.day, hh, mm, tzinfo=JST)
+
+
+def _is_published(d: date, lang: str) -> bool:
+    meta_path = os.path.join(post_dir(d, lang), "meta.json")
+    if not os.path.exists(meta_path):
+        return False
+    with open(meta_path, encoding="utf-8") as f:
+        return bool(json.load(f).get("published_media_id"))
+
+
+# 動作確認用：posts/_selftest.json があると、Instagram には投稿せず、その時刻に「投稿したつもり」の記録だけを残す
+SELFTEST = os.path.join(ROOT, "posts", "_selftest.json")
+
+
+def _selftest() -> dict | None:
+    if os.path.exists(SELFTEST):
+        with open(SELFTEST, encoding="utf-8") as f:
+            return json.load(f)
+    return None
+
+
+def upcoming_slots(config: dict, now: datetime, lead: timedelta = LEAD) -> list[tuple[datetime, dict]]:
+    """「予定時刻 − lead」から「予定時刻 ＋ 猶予」の間にある、未投稿の予定を時刻順に返す。"""
+    st = _selftest()
+    if st and not st.get("fired_at"):
+        t = datetime.fromisoformat(st["at"])
+        if t - lead <= now <= t + GRACE:
+            return [(t, {"lang": "ja", "theme": "selftest", "time": f"{t:%H:%M}"})]
+    found: dict[tuple[str, str], tuple[datetime, dict]] = {}
+    for offset in (-1, 0, 1):
+        d = now.date() + timedelta(days=offset)
+        # 日付指定（臨時投稿）を曜日指定より優先する（find_slot と同じ）
+        for s in sorted(config.get("schedule", []), key=lambda e: 0 if e.get("date") else 1):
+            if not _matches(s, d):
+                continue
+            key = (d.isoformat(), s["lang"])
+            if key in found:
+                continue
+            t = _slot_dt(s, d)
+            if t - lead <= now <= t + GRACE and not _is_published(d, s["lang"]):
+                found[key] = (t, s)
+    return sorted(found.values(), key=lambda x: (x[0], x[1]["lang"] != "ja"))
 
 
 def due_slots(config: dict, now: datetime) -> list[dict]:
@@ -84,8 +139,7 @@ def due_slots(config: dict, now: datetime) -> list[dict]:
     for s in config.get("schedule", []):
         if not _matches(s, today):
             continue
-        hh, mm = map(int, str(s["time"]).split(":"))
-        slot_dt = datetime(today.year, today.month, today.day, hh, mm, tzinfo=JST)
+        slot_dt = _slot_dt(s, today)
         if slot_dt - timedelta(minutes=5) <= now <= slot_dt + _grace(s):
             out.append(s)
     # 同じ日の日本語・英語が重なったら、時刻順→日本語→英語の順にする
@@ -208,12 +262,137 @@ def cmd_auto(stage: str) -> None:
             cmd_publish(now.date(), s["lang"])
 
 
+# ===== 予定時刻ちょうどに投稿する仕組み =====
+# GitHub の定時実行（cron）は混雑時に何時間も遅れたり、取りやめられたりする。
+# そこで cron は「予定の12時間前から30分おき」に何度も起動するようにし、どれか1回でも起動すれば、
+# その実行が予定時刻まで待機して、時刻ちょうどに投稿する。
+# 1回の実行は6時間までなので、待ち時間が長いときは自分自身をもう一度起動して待機を引き継ぐ。
+
+def _now() -> datetime:
+    return datetime.now(JST)
+
+
+def _sleep(seconds: float) -> None:
+    import time
+    time.sleep(seconds)
+
+
+def _git(*args: str, check: bool = True) -> subprocess.CompletedProcess:
+    r = subprocess.run(["git", *args], cwd=ROOT, capture_output=True, text=True)
+    if check and r.returncode != 0:
+        raise RuntimeError(f"git {' '.join(args)} に失敗: {r.stderr.strip()[-500:]}")
+    return r
+
+
+def _sync() -> None:
+    """GitHub の最新（確認ページでの修正など）を取り込む。"""
+    _git("pull", "--rebase", "--autostash", "-q", check=False)
+
+
+def _save(message: str) -> None:
+    """作成した内容や投稿結果を GitHub に保存する。"""
+    _git("add", "-A", "posts", "state")
+    if _git("diff", "--cached", "--quiet", check=False).returncode == 0:
+        return  # 変更なし
+    _git("commit", "-q", "-m", message)
+    for _ in range(3):
+        _sync()
+        if _git("push", "-q", check=False).returncode == 0:
+            return
+    raise RuntimeError("GitHub への保存に失敗しました")
+
+
+def _relay() -> None:
+    """待ち時間が1回の実行の上限を超えるので、新しい実行に待機を引き継ぐ。"""
+    r = subprocess.run(["gh", "workflow", "run", "post.yml", "--ref", "main", "-f", "auto=true"],
+                       cwd=ROOT, capture_output=True, text=True)
+    print("待機を次の実行に引き継ぎました。" if r.returncode == 0 else f"⚠️ 引き継ぎに失敗: {r.stderr.strip()}")
+
+
+def _publish_slot(t: datetime, s: dict) -> None:
+    d, lang = t.date(), s["lang"]
+    if s["theme"] == "selftest":
+        _sync()
+        st = _selftest() or {}
+        st["fired_at"] = _now().isoformat(timespec="seconds")
+        st["run_id"] = os.environ.get("GITHUB_RUN_ID")
+        with open(SELFTEST, "w", encoding="utf-8") as f:
+            json.dump(st, f, ensure_ascii=False, indent=2)
+        _save("動作確認：予定時刻に到達")
+        print(f"【動作確認】予定 {t:%H:%M:%S} → 実際 {_now():%H:%M:%S}（Instagramには投稿していません）")
+        return
+    for attempt in range(1, 4):
+        try:
+            _sync()
+            if _is_published(d, lang):
+                print(f"{d} {lang} は投稿済みです。")
+                return
+            cmd_prepare(d, lang, skip_ai=False)  # 作成済みなら何もしない
+            _save("投稿を作成")
+            sha = _git("rev-parse", "HEAD").stdout.strip()
+            os.environ["IMAGE_BASE_URL"] = f"https://raw.githubusercontent.com/{os.environ['GITHUB_REPOSITORY']}/{sha}"
+            cmd_publish(d, lang)
+            _save("投稿結果を記録")
+            return
+        except Exception as e:  # 一時的なエラーに備えて少し待って再試行
+            print(f"⚠️ {d} {lang} の投稿でエラー（{attempt}回目）: {e}")
+            if attempt < 3:
+                _sleep(120)
+
+
+def cmd_upcoming() -> None:
+    """12時間以内に未投稿の予定がいくつあるか（ワークフローが準備の要否を判断するため）。"""
+    slots = upcoming_slots(load_yaml("config.yaml"), _now())
+    for t, s in slots:
+        print(f"# {t:%m/%d %H:%M} {s['lang']} {s['theme']}", file=sys.stderr)
+    print(f"count={len(slots)}")
+
+
+def cmd_scheduler() -> None:
+    config = load_yaml("config.yaml")
+    start = _now()
+    st = _selftest()
+    deadline = start + (timedelta(minutes=st["budget_min"]) if st and st.get("budget_min") else JOB_BUDGET)
+    handled: set[tuple[str, str]] = set()
+    while True:
+        _sync()
+        slots = [(t, s) for t, s in upcoming_slots(config, _now())
+                 if (t.date().isoformat(), s["lang"]) not in handled]
+        if not slots:
+            print(f"{_now():%m/%d %H:%M} 現在、これから投稿する予定（12時間以内）はありません。")
+            return
+        t, s = slots[0]
+        key = (t.date().isoformat(), s["lang"])
+        print(f"次の予定: {t:%m/%d(%a) %H:%M} {s['lang']}（{s['theme']}）")
+        # 文章と画像は早めに作っておく（AIの混雑などで失敗しても、予定時刻にもう一度試す）
+        if s["theme"] not in ("report", "selftest"):
+            try:
+                cmd_prepare(t.date(), s["lang"], skip_ai=False)
+                _save("投稿を作成")
+            except Exception as e:
+                print(f"⚠️ 事前の作成に失敗（予定時刻に再試行します）: {e}")
+        if t > deadline:
+            # この実行では予定時刻まで待ちきれない：待てるだけ待ってから、次の実行に引き継ぐ
+            rest = (deadline - _now()).total_seconds()
+            if rest > 0:
+                print(f"予定まで長いため、{rest / 3600:.1f} 時間待ってから次の実行に引き継ぎます。")
+                _sleep(rest)
+            _relay()
+            return
+        wait = (t - _now()).total_seconds()
+        if wait > 0:
+            print(f"{t:%H:%M} まで {wait / 3600:.1f} 時間待機します。")
+            _sleep(wait)
+        _publish_slot(t, s)
+        handled.add(key)
+
+
 MISSED_STATE = os.path.join(ROOT, "state", "missed.json")
 MISSED_REPORT = os.path.join(ROOT, "missed_report.md")
 
 
 def cmd_check_missed() -> None:
-    """今日・昨日の予定のうち、投稿できる時間（予定時刻＋3時間）を過ぎても投稿されていないものを報告する。
+    """今日・昨日の予定のうち、投稿できる時間（予定時刻の時台のうち）を過ぎても投稿されていないものを報告する。
     見つかったら missed_report.md を書き出す（ワークフローがGitHubのIssueにして、メールで知らせる）。"""
     config = load_yaml("config.yaml")
     now = datetime.now(JST)
@@ -226,8 +405,7 @@ def cmd_check_missed() -> None:
         for s in config.get("schedule", []):
             if not _matches(s, d):
                 continue
-            hh, mm = map(int, str(s["time"]).split(":"))
-            slot_dt = datetime(d.year, d.month, d.day, hh, mm, tzinfo=JST)
+            slot_dt = _slot_dt(s, d)
             key = f"{d.isoformat()} {s['time']} {s['lang']}"
             if now <= slot_dt + _grace(s) or key in reported:
                 continue
@@ -246,7 +424,7 @@ def cmd_check_missed() -> None:
     for k in new:
         d, t, lang = k.split()
         lines.append(f"- {d} {t} {lang_name.get(lang, lang)}")
-    lines += ["", "考えられる原因：GitHubの定時実行が大幅に遅れた、またはエラーで止まった。",
+    lines += ["", "考えられる原因：GitHubの起動が予定の12時間前から一度も行われなかった、またはエラーで止まった。",
               "Actions タブで、その時間帯の実行結果を確認してください。"]
     with open(MISSED_REPORT, "w", encoding="utf-8") as f:
         f.write("\n".join(lines) + "\n")
@@ -258,7 +436,7 @@ def cmd_check_missed() -> None:
 
 def main() -> None:
     p = argparse.ArgumentParser()
-    p.add_argument("command", choices=["prepare", "publish", "auto-prepare", "auto-publish", "check-missed"])
+    p.add_argument("command", choices=["prepare", "publish", "auto-prepare", "auto-publish", "scheduler", "upcoming", "check-missed"])
     p.add_argument("--lang", choices=["ja", "en"])
     p.add_argument("--date", help="YYYY-MM-DD（省略時は日本時間の今日）")
     p.add_argument("--skip-ai", action="store_true")
@@ -266,6 +444,12 @@ def main() -> None:
     a = p.parse_args()
     if a.command == "check-missed":
         cmd_check_missed()
+        return
+    if a.command == "scheduler":
+        cmd_scheduler()
+        return
+    if a.command == "upcoming":
+        cmd_upcoming()
         return
     if a.command.startswith("auto-"):
         cmd_auto(a.command.split("-", 1)[1])
