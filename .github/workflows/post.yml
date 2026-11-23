@@ -1,6 +1,6 @@
 name: Instagram 自動投稿
 # 一覧に表示される名前（どの実行か見分けやすくする）
-run-name: ${{ (github.event_name == 'schedule' || inputs.auto) && '定時チェック（予定があれば投稿）' || format('{0} {1} {2}{3}', inputs.date || '今日', inputs.lang == 'en' && '英語' || '日本語', inputs.dry_run && '試し作成' || '投稿', inputs.remake && '（作り直し）' || '') }}
+run-name: ${{ (github.event_name != 'workflow_dispatch' || inputs.auto) && '定時チェック（予定があれば投稿）' || format('{0} {1} {2}{3}', inputs.date || '今日', inputs.lang == 'en' && '英語' || '日本語', inputs.dry_run && '試し作成' || '投稿', inputs.remake && '（作り直し）' || '') }}
 
 on:
   schedule:
@@ -11,6 +11,10 @@ on:
     - cron: "13,43 7-11 * * *"   # 毎日 16:13〜20:43
     - cron: "13,43 21-23 * * 0"  # 月曜 6:13〜8:43（日曜礼拝の報告）
     - cron: "13,43 0-3 * * 1"    # 月曜 9:13〜12:43（遅れたときの予備）
+  # Mac から trigger/ フォルダを更新して送ると、すぐに「定時チェック」が動く
+  # （GitHub の定時実行は何時間も遅れることがあるため、確実に動かす手段として使う）
+  push:
+    paths: ["trigger/**"]
   workflow_dispatch:
     inputs:
       lang:
@@ -46,7 +50,7 @@ jobs:
   post:
     runs-on: ubuntu-latest
     env:
-      IS_SCHEDULE: ${{ github.event_name == 'schedule' || inputs.auto }}
+      IS_SCHEDULE: ${{ github.event_name != 'workflow_dispatch' || inputs.auto }}
       LANG_CODE: ${{ inputs.lang || 'ja' }}
       DATE_ARG: ${{ inputs.date && format('--date {0}', inputs.date) || '' }}
       REMAKE_ARG: ${{ inputs.remake && '--remake' || '' }}
@@ -97,7 +101,7 @@ jobs:
           fi
 
       - name: 投稿漏れの確認
-        if: ${{ always() && (github.event_name == 'schedule' || inputs.auto) }}
+        if: ${{ always() && (github.event_name != 'workflow_dispatch' || inputs.auto) }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
